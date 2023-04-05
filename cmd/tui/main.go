@@ -18,12 +18,6 @@ func main() {
 
 	app := tview.NewApplication()
 
-	// the prompt area has a text area and a help hint
-	promptTextArea := createPromptTextArea()
-	promptView := createPromptView(promptTextArea)
-	previewTree := createPreviewTree()
-	previewTextView := tview.NewTextView()
-
 	pages := tview.NewPages()
 	helpPage := createHelpPage(pages)
 	waitPage := tview.NewModal().
@@ -33,13 +27,26 @@ func main() {
 		// 	app.Stop()
 		// })
 
+	previewTree := createPreviewTree()
+
+	initForm := createInitializerView(app,
+		cfg,
+		func() { pages.ShowPage("wait") },
+		func(resp *gpt.InitializeResponse) {
+			sort.Strings(resp.Files)
+			// fmt.Println(resp.Files)
+			refreshPreviewTree(previewTree, resp.Files)
+			pages.HidePage("wait")
+		})
+
 	// Frames in a Flex layout.
 	mainPage := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(promptView, 0, 1, true).
-		AddItem(tview.NewFlex().
-			AddItem(previewTree, 0, 1, false).
-			AddItem(previewTextView, 0, 3, false), 0, 7, false)
+		AddItem(initForm, 0, 1, true).
+		AddItem(previewTree, 0, 8, false)
+		// AddItem(previewTextView, 0, 3, false), 0, 7, false)
+
+	previewTree.SetBorder(true).SetTitle("Preview")
 
 	pages.AddAndSwitchToPage("main", mainPage, true).
 		AddPage("help", helpPage, true, false).
@@ -48,26 +55,6 @@ func main() {
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyCtrlH {
 			pages.ShowPage("help") //TODO: Check when clicking outside help window with the mouse. Then clicking help again.
-			return nil
-		} else if event.Key() == tcell.KeyEnter {
-			pages.ShowPage("wait")
-			go func() {
-				app.QueueUpdateDraw(func() {
-					opts := gpt.ProjectOptions{
-						Name:   "test",
-						Prompt: promptTextArea.GetText(),
-					}
-					resp, err := gpt.NewProject(cfg.Gpt, &opts)
-					previewTextView.SetText(resp.Preview)
-					if err != nil {
-						panic(err)
-					}
-					sort.Strings(resp.Files)
-					// fmt.Println(resp.Files)
-					refreshPreviewTree(previewTree, resp.Files)
-					pages.HidePage("wait")
-				})
-			}()
 			return nil
 		}
 		return event
@@ -79,26 +66,89 @@ func main() {
 
 }
 
-func createPromptTextArea() *tview.TextArea {
-	textArea := tview.NewTextArea().
-		SetPlaceholder("Describe your application here. eg: 'The application is called voyager and contains two services: janeway and chakotay'.")
-	textArea.SetTitle("Prompt").
-		SetBorder(true)
+func createInitializerView(app *tview.Application, cfg *config.Config, pre func(), post func(*gpt.InitializeResponse)) *tview.Grid {
+	p := "Wafflemart allows users to order waffles. It consists of an API ('batter') and a worker ('iron'). batter runs on AWS Lambda and the worker runs on ECS."
+	promptTextArea := tview.NewTextArea().
+		SetPlaceholder(p).
+		SetWordWrap(true).
+		SetSize(4, 0)
+		// SetTextStyle(tcell.StyleDefault.
+		// 	Foreground(tcell.ColorDarkSlateGray)).
+		// 	Foreground(tcell.ColorDimGray)).
+		// SetPlaceholderStyle(tcell.StyleDefault.
+		// 	Foreground(tcell.ColorDarkSlateGray))
 
-	return textArea
-}
+	promptTextArea.SetBorder(true).
+		SetTitle(" Describe your application  ").
+		// SetBackgroundColor(tcell.ColorDarkSlateGray).
+		// SetTitleColor(tcell.ColorDarkSlateGray).
+		SetTitleAlign(tview.AlignLeft)
 
-// Create a tview box with the title "Prompt"
-func createPromptView(textArea *tview.TextArea) *tview.Flex {
-	helpInfo := tview.NewTextView().
-		SetText(" Enter: Submit prompt | Ctrl-H: Show Help | Ctrl-C: Exit")
+	// promptLabel := tview.NewTextView().SetText("Describe your application:")
 
-	promptView := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(textArea, 0, 6, true).
-		AddItem(helpInfo, 0, 1, false)
+	save := func() {
+		pre()
+		go func() {
+			app.QueueUpdateDraw(func() {
+				opts := gpt.InitializeOptions{
+					Stream: false,
+					Prompt: promptTextArea.GetText(),
+				}
+				resp, err := gpt.Initialize(cfg.Gpt, &opts)
+				// previewTextView.SetText(resp.Preview)
+				if err != nil {
+					panic(err)
+				}
+				post(resp)
+			})
+		}()
+	}
+	saveBtn := tview.NewButton("Build").
+		SetSelectedFunc(save).
+		SetStyle(tcell.StyleDefault.Background(tcell.ColorGreen).Foreground(tcell.ColorDimGray))
+	// saveBtn.
+	// 	SetBorder(true)
 
-	return promptView
+	quitBtn := tview.NewButton("Quit").
+		SetSelectedFunc(func() {
+			app.Stop()
+		}).
+		SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkRed).Foreground(tcell.ColorDimGray))
+	// quitBtn.
+	// 	SetBorder(true)
+
+	form := tview.NewGrid().
+		// SetDirection(tview.FlexRow).
+		// AddItem(promptLabel, 0, 1, true).
+		// Setcol
+		SetColumns(-2, 1, 15).
+		AddItem(promptTextArea, 0, 0, 1, 1, 0, 0, true).
+		AddItem(tview.NewBox(), 0, 1, 1, 1, 0, 0, false).
+		AddItem(tview.NewGrid().
+			// SetDirection(tview.FlexRow).
+			// SetColumns(10, 2, 10, 2, 10, 2, 10, 2, 10, 2, 10).
+			// SetMinSize(1, 10).
+			// SetColumns(0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0).
+			// AddItem(tview.NewBox(), 0, 10, false).
+			SetRows(0, -3, 0, -3, 0).
+			AddItem(saveBtn, 1, 0, 1, 1, 0, 0, false).
+			// AddItem(tview.NewBox(), 0, 1, false).
+			AddItem(quitBtn, 3, 0, 1, 1, 0, 0, false), 0, 2, 1, 1, 0, 0, false)
+
+	// form.SetFieldBackgroundColor(tcell.ColorDarkSlateGray)
+	// form.SetLabelColor(tcell.ColorDimGray)
+
+	// helpText := tview.NewTextView().
+	// 	SetText("These prompts will be used to generate (or [::u]re[::-]generate) a multi-service application.").
+	// 	SetDynamicColors(true)
+
+	// view := tview.NewFlex().
+	// 	SetDirection(tview.FlexRow).
+	// 	AddItem(tview.NewBox(), 0, 1, false).
+	// 	// AddItem(helpText, 3, 0, false).
+	// 	AddItem(form, 0, 1, false)
+
+	return form
 }
 
 func addNodes(path string, nodes *map[string]*tview.TreeNode) {

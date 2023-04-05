@@ -77,12 +77,13 @@ When formatting previews of the application structure:
 
 `
 
-type ProjectOptions struct {
+type InitializeOptions struct {
+	Stream bool
 	Name   string
 	Prompt string
 }
 
-type ProjectResponse struct {
+type InitializeResponse struct {
 	Preview string   `json:"preview,omitempty"`
 	Files   []string `json:"files,omitempty"`
 }
@@ -94,7 +95,7 @@ type ProjectResponse struct {
 // 	return strings.Join(paths, "\n")
 // }
 
-func NewProject(cfg GptConfig, opts *ProjectOptions) (*ProjectResponse, error) {
+func Initialize(cfg GptConfig, opts *InitializeOptions) (*InitializeResponse, error) {
 	defaultContext := []openai.ChatCompletionMessage{{
 		Content: commonPrompt,
 		Role:    "system",
@@ -122,7 +123,7 @@ func NewProject(cfg GptConfig, opts *ProjectOptions) (*ProjectResponse, error) {
 		return nil, err
 	}
 
-	var parsedResp ProjectResponse
+	var parsedResp InitializeResponse
 	if err := json.Unmarshal([]byte(resp), &parsedResp); err != nil {
 		return nil, err
 	}

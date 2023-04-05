@@ -11,7 +11,7 @@ import (
 
 var cfg *config.Config
 var cfgPath string
-var opts gpt.ProjectOptions
+var opts gpt.InitializeOptions
 
 var rootCmd = &cobra.Command{
 	Use:   "gps",
@@ -28,7 +28,7 @@ var createCmd = &cobra.Command{
 			return err
 		}
 
-		resp, err := gpt.NewProject(cfg.Gpt, &opts)
+		resp, err := gpt.Initialize(cfg.Gpt, &opts)
 		if err != nil {
 			return err
 		}
